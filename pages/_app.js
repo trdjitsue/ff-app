@@ -20,7 +20,7 @@ export default function App({ Component, pageProps }) {
   return (
     <>
       <Head>
-        <script src="https://cdn.tailwindcss.com"></script>
+        
         <script
           dangerouslySetInnerHTML={{
             __html: `

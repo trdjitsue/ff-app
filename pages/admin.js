@@ -23,16 +23,16 @@ export default function Admin({ user, loading }) {
   const [newActivity, setNewActivity] = useState({ name: '', description: '', points: '' });
   const router = useRouter();
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-      return;
-    }
+useEffect(() => {
+  if (!loading && !user) {
+    router.push('/login');
+    return;
+  }
 
-    if (user) {
-      checkAdminAndFetchData();
-    }
-  }, [user, loading, router]);
+  if (user) {
+    checkAdminAndFetchData();
+  }
+}, [user, loading, router]); // เพิ่ม checkAdminAndFetchData ไม่ต้อง
 
   const checkAdminAndFetchData = async () => {
     try {

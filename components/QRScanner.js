@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-const QRScanner = ({ onScan, onError, isActive }) => {
+export default function QRScanner({ onScan, onError, isActive }) {
   const videoRef = useRef();
   const [scanner, setScanner] = useState(null);
   const [hasCamera, setHasCamera] = useState(false);
@@ -34,7 +34,7 @@ const QRScanner = ({ onScan, onError, isActive }) => {
         scanner.destroy();
       }
     };
-  }, [isActive]);
+  }, [isActive, onScan]);
 
   useEffect(() => {
     if (scanner && isActive) {
@@ -42,9 +42,9 @@ const QRScanner = ({ onScan, onError, isActive }) => {
     } else if (scanner) {
       scanner.stop();
     }
-  }, [scanner, isActive]);
+  }, [scanner, isActive, onError]);
 
-  if (!hasCamera) {
+  if (!hasCamera && isActive) {
     return (
       <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-6 text-center">
         <p className="text-red-200">📷 Camera not available</p>
@@ -68,6 +68,4 @@ const QRScanner = ({ onScan, onError, isActive }) => {
       </div>
     </div>
   );
-};
-
-export default QRScanner;
+}

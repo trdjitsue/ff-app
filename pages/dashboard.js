@@ -13,18 +13,19 @@ export default function Dashboard({ user, loading }) {
   const [showQR, setShowQR] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-      return;
-    }
+useEffect(() => {
+  if (!loading && !user) {
+    router.push('/login');
+    return;
+  }
 
-    if (user) {
-      fetchUserData();
-      fetchActivities();
-      fetchCompletedActivities();
-    }
-  }, [user, loading, router]);
+  if (user) {
+    fetchUserData();
+    fetchActivities();
+    fetchCompletedActivities();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [user, loading, router]);
 
   const fetchUserData = async () => {
     try {
