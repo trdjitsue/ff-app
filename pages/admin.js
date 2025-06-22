@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { signOut } from 'firebase/auth';
+import dynamic from 'next/dynamic';
 import { 
   collection, 
   getDocs, 
@@ -14,6 +15,19 @@ import {
   where 
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+
+// Dynamic import for QR Scanner to avoid SSR issues
+const QRScanner = dynamic(() => import('../components/QRScanner'), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-black/20 rounded-xl p-4 min-h-[300px] flex items-center justify-center">
+      <div className="text-center text-white/50">
+        <div className="text-6xl mb-4">📷</div>
+        <p>กำลังโหลดกล้อง...</p>
+      </div>
+    </div>
+  )
+});
 
 export default function Admin({ user, loading }) {
   const [userData, setUserData] = useState(null);
@@ -92,52 +106,16 @@ export default function Admin({ user, loading }) {
   };
 
   // QR Scanner Functions
-  const startScanning = async () => {
+  const handleScanSuccess = async (scannedData) => {
     try {
-      const { Html5QrcodeScanner } = await import('html5-qrcode');
-      
-      const scannerInstance = new Html5QrcodeScanner(
-        "qr-reader", 
-        { 
-          fps: 10, 
-          qrbox: { width: 250, height: 250 },
-          rememberLastUsedCamera: true,
-          aspectRatio: 1.0
-        },
-        false
-      );
-
-      scannerInstance.render(onScanSuccess, onScanError);
-      setScanner(scannerInstance);
-      setIsScanning(true);
-      setScanMessage('กำลังเปิดกล้อง... กรุณาให้นักเรียนแสดง QR Code');
-    } catch (error) {
-      console.error('Error starting scanner:', error);
-      setScanMessage('ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบการอนุญาตใช้กล้อง');
-    }
-  };
-
-  const stopScanning = () => {
-    if (scanner) {
-      scanner.clear();
-      setScanner(null);
-    }
-    setIsScanning(false);
-    setScanResult(null);
-    setStudentInfo(null);
-    setScanMessage('');
-  };
-
-  const onScanSuccess = async (decodedText, decodedResult) => {
-    try {
-      setScanResult(decodedText);
+      setScanResult(scannedData);
       
       // Parse the QR code data (assuming it contains student ID or email)
-      let studentId = decodedText;
+      let studentId = scannedData;
       
       // If QR code contains JSON data
       try {
-        const qrData = JSON.parse(decodedText);
+        const qrData = JSON.parse(scannedData);
         studentId = qrData.studentId || qrData.id || qrData.email;
       } catch (e) {
         // If not JSON, treat as plain student ID/email
@@ -153,11 +131,7 @@ export default function Admin({ user, loading }) {
       if (student) {
         setStudentInfo(student);
         setScanMessage(`พบนักเรียน: ${student.name} (${student.email})`);
-        
-        // Stop scanner temporarily
-        if (scanner) {
-          scanner.pause();
-        }
+        setIsScanning(false); // Stop scanning when student found
       } else {
         setScanMessage('ไม่พบข้อมูลนักเรียนในระบบ กรุณาตรวจสอบ QR Code');
         // Continue scanning
@@ -168,9 +142,23 @@ export default function Admin({ user, loading }) {
     }
   };
 
-  const onScanError = (error) => {
-    // Handle scan error - usually can ignore
-    console.log('Scan error:', error);
+  const handleScanError = (error) => {
+    console.error('Scan error:', error);
+    setScanMessage('เกิดข้อผิดพลาดในการใช้กล้อง กรุณาตรวจสอบการอนุญาต');
+  };
+
+  const startScanning = () => {
+    setIsScanning(true);
+    setStudentInfo(null);
+    setScanResult(null);
+    setScanMessage('กำลังเปิดกล้อง... กรุณาให้นักเรียนแสดง QR Code');
+  };
+
+  const stopScanning = () => {
+    setIsScanning(false);
+    setScanResult(null);
+    setStudentInfo(null);
+    setScanMessage('');
   };
 
   const addPointsFromScan = async () => {
@@ -197,10 +185,8 @@ export default function Admin({ user, loading }) {
         setStudentInfo(null);
         setScanResult(null);
         setScanMessage('พร้อมสแกน QR Code ใหม่');
-        if (scanner) {
-          scanner.resume();
-        }
-      }, 2000);
+        setIsScanning(true); // Resume scanning
+      }, 3000);
       
     } catch (error) {
       console.error('Error adding points:', error);
@@ -474,12 +460,14 @@ export default function Admin({ user, loading }) {
                     {!isScanning ? (
                       <div className="text-center text-white/50">
                         <div className="text-6xl mb-4">📷</div>
-                        <p>กดปุ่ม "เริ่มสแกน" เพื่อเปิดกล้อง</p>
+                        <p>กดปุ่ม &quot;เริ่มสแกน&quot; เพื่อเปิดกล้อง</p>
                       </div>
                     ) : (
-                      <div className="w-full">
-                        <div id="qr-reader" className="w-full"></div>
-                      </div>
+                      <QRScanner
+                        onScan={handleScanSuccess}
+                        onError={handleScanError}
+                        isActive={isScanning}
+                      />
                     )}
                   </div>
                   
