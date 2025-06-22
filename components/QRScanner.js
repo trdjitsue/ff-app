@@ -121,7 +121,7 @@ export default function QRScanner({ onScan, onError, isActive }) {
           <div className="text-red-300 text-sm space-y-2">
             <p><strong>สำหรับ iPhone/iPad:</strong></p>
             <p>1. ไปที่ Settings → Safari → Camera</p>
-            <p>2. เลือก "Ask" หรือ "Allow"</p>
+            <p>2. เลือก &quot;Ask&quot; หรือ &quot;Allow&quot;</p>
             <p>3. รีเฟรชหน้าเว็บนี้</p>
             <button 
               onClick={() => window.location.reload()}
