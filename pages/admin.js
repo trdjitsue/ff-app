@@ -137,7 +137,8 @@ export default function Admin({ user, loading }) {
 
       if (student) {
         setStudentInfo(student);
-        setScanMessage(`พบนักเรียน: ${student.name} (${student.email})`);
+        const displayName = student.nickname || `${student.firstName} ${student.lastName}` || student.name;
+        setScanMessage(`พบนักเรียน: ${displayName}`);
         setIsScanning(false); // Stop scanning when student found
       } else {
         setScanMessage(`ไม่พบข้อมูลนักเรียนในระบบ\nQR Code: ${scannedData}\nStudent ID ที่ค้นหา: ${studentId}`);
@@ -180,15 +181,16 @@ export default function Admin({ user, loading }) {
       // Log the point addition
       await addDoc(collection(db, 'pointLogs'), {
         studentId: studentInfo.id,
-        studentName: studentInfo.name,
+        studentName: studentInfo.nickname || `${studentInfo.firstName} ${studentInfo.lastName}` || studentInfo.name,
         points: pointsToAdd,
         method: 'qr_scan',
         adminId: user.uid,
-        adminName: userData?.name,
+        adminName: userData?.nickname || userData?.name,
         timestamp: new Date()
       });
 
-      setScanMessage(`✅ เพิ่ม ${pointsToAdd} คะแนนให้ ${studentInfo.name} เรียบร้อย!`);
+      const displayName = studentInfo.nickname || `${studentInfo.firstName} ${studentInfo.lastName}` || studentInfo.name;
+      setScanMessage(`✅ เพิ่ม ${pointsToAdd} คะแนนให้ ${displayName} เรียบร้อย!`);
       
       // Reset for next scan
       setTimeout(() => {
@@ -230,8 +232,9 @@ export default function Admin({ user, loading }) {
     }
   };
 
-  const addPointsDirectly = (studentId, studentName) => {
-    const points = prompt(`จะให้คะแนนกับ ${studentName} เท่าไหร่?\n\nใส่เลขบวก = เพิ่มคะแนน\nใส่เลขลบ = หักคะแนน`);
+  const addPointsDirectly = (studentId, student) => {
+    const displayName = student.nickname || `${student.firstName} ${student.lastName}` || student.name;
+    const points = prompt(`จะให้คะแนนกับ ${displayName} เท่าไหร่?\n\nใส่เลขบวก = เพิ่มคะแนน\nใส่เลขลบ = หักคะแนน`);
     if (points && !isNaN(points)) {
       const pointsNum = parseInt(points);
       if (pointsNum !== 0) {
@@ -332,7 +335,7 @@ export default function Admin({ user, loading }) {
             <div className="flex items-center space-x-6">
               <div className="text-right">
                 <p className="text-white/70 text-sm">ผู้ดูแลระบบ</p>
-                <p className="font-bold text-white text-lg">{userData?.name}</p>
+                <p className="font-bold text-white text-lg">{userData?.nickname || userData?.name}</p>
               </div>
               <button
                 onClick={handleLogout}
@@ -444,12 +447,16 @@ export default function Admin({ user, loading }) {
                         <div className="flex items-center space-x-3 mb-4">
                           <div className="w-10 h-10 bg-gradient-to-r from-cyan-400 to-purple-400 rounded-full flex items-center justify-center">
                             <span className="text-white font-bold text-sm">
-                              {studentInfo.name?.charAt(0)?.toUpperCase()}
+                              {(studentInfo.nickname || studentInfo.firstName || studentInfo.name)?.charAt(0)?.toUpperCase()}
                             </span>
                           </div>
                           <div>
-                            <p className="text-white font-medium">{studentInfo.name}</p>
-                            <p className="text-white/70 text-sm">{studentInfo.email}</p>
+                            <p className="text-white font-medium">
+                              {studentInfo.nickname ? 
+                                `${studentInfo.nickname} (${studentInfo.firstName} ${studentInfo.lastName})` :
+                                `${studentInfo.firstName} ${studentInfo.lastName}` || studentInfo.name
+                              }
+                            </p>
                             <p className="text-white/70 text-sm">คะแนนปัจจุบัน: {studentInfo.points}</p>
                           </div>
                         </div>
@@ -559,7 +566,7 @@ export default function Admin({ user, loading }) {
                           นักเรียน
                         </th>
                         <th className="px-6 py-4 text-left text-sm font-medium text-white/90 uppercase tracking-wider">
-                          อีเมล
+                          ชื่อเล่น
                         </th>
                         <th className="px-6 py-4 text-left text-sm font-medium text-white/90 uppercase tracking-wider">
                           คะแนน
@@ -576,14 +583,21 @@ export default function Admin({ user, loading }) {
                             <div className="flex items-center">
                               <div className="w-10 h-10 bg-gradient-to-r from-cyan-400 to-purple-400 rounded-full flex items-center justify-center mr-4">
                                 <span className="text-white font-bold text-sm">
-                                  {student.name?.charAt(0)?.toUpperCase() || 'N'}
+                                  {(student.firstName || student.name)?.charAt(0)?.toUpperCase() || 'N'}
                                 </span>
                               </div>
-                              <div className="text-sm font-medium text-white">{student.name}</div>
+                              <div className="text-sm font-medium text-white">
+                                {student.firstName && student.lastName ? 
+                                  `${student.firstName} ${student.lastName}` : 
+                                  student.name || 'ไม่มีชื่อ'
+                                }
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-white/70">{student.email}</div>
+                            <div className="text-sm text-white/70">
+                              {student.nickname || '-'}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold bg-gradient-to-r from-cyan-400 to-purple-400 text-white">
@@ -619,7 +633,7 @@ export default function Admin({ user, loading }) {
                             </div>
                             
                             <button
-                              onClick={() => addPointsDirectly(student.id, student.name)}
+                              onClick={() => addPointsDirectly(student.id, student)}
                               className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg font-medium transition-colors w-full"
                             >
                               🎯 กำหนดเอง
