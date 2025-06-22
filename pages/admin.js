@@ -110,18 +110,23 @@ export default function Admin({ user, loading }) {
     try {
       setScanResult(scannedData);
       
-      // Parse the QR code data (assuming it contains student ID or email)
+      // Parse the QR code data from dashboard format: "uid-name"
       let studentId = scannedData;
+      
+      // If QR code contains the dashboard format "uid-name"
+      if (scannedData.includes('-')) {
+        studentId = scannedData.split('-')[0]; // Get the user ID part
+      }
       
       // If QR code contains JSON data
       try {
         const qrData = JSON.parse(scannedData);
-        studentId = qrData.studentId || qrData.id || qrData.email;
+        studentId = qrData.studentId || qrData.id || qrData.email || qrData.uid;
       } catch (e) {
-        // If not JSON, treat as plain student ID/email
+        // If not JSON, use the processed studentId
       }
 
-      // Find student by ID or email
+      // Find student by ID (uid from Firebase)
       const student = students.find(s => 
         s.id === studentId || 
         s.email === studentId ||
@@ -133,8 +138,11 @@ export default function Admin({ user, loading }) {
         setScanMessage(`พบนักเรียน: ${student.name} (${student.email})`);
         setIsScanning(false); // Stop scanning when student found
       } else {
-        setScanMessage('ไม่พบข้อมูลนักเรียนในระบบ กรุณาตรวจสอบ QR Code');
-        // Continue scanning
+        setScanMessage(`ไม่พบข้อมูลนักเรียนในระบบ\nQR Code: ${scannedData}\nStudent ID ที่ค้นหา: ${studentId}`);
+        // Continue scanning after 3 seconds
+        setTimeout(() => {
+          setScanMessage('กรุณาลองสแกน QR Code ใหม่อีกครั้ง');
+        }, 3000);
       }
     } catch (error) {
       console.error('Error processing scan result:', error);
