@@ -95,7 +95,7 @@ export default function Login({ user }) {
               </div>
             </Link>
             <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mb-2">
-              ยินดีต้อนรับ ไอหน้าหี
+              ยินดีต้อนรับ ไอหล่อ
             </h1>
            
           </div>
