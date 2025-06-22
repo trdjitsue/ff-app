@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import { collection, query, where, getDocs, addDoc, doc, setDoc } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import Link from 'next/link';
 
@@ -20,21 +20,28 @@ export default function Login({ user }) {
     return null;
   }
 
-  const generateUsername = (firstName, lastName) => {
-    // สร้าง username จาก ชื่อ + นามสกุล + random number
-    const cleanFirst = firstName.trim().toLowerCase();
-    const cleanLast = lastName.trim().toLowerCase();
-    const randomNum = Math.floor(Math.random() * 1000);
-    return `${cleanFirst}${cleanLast}${randomNum}`;
+  // สร้าง fake email จากชื่อ
+  const generateEmailFromName = (firstName, lastName) => {
+    const cleanFirst = firstName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanLast = lastName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const randomNum = Math.floor(Math.random() * 10000);
+    return `${cleanFirst}${cleanLast}${randomNum}@ff-app.local`;
   };
 
-  const hashPassword = async (password) => {
-    // ใช้ Web Crypto API แทน bcrypt สำหรับ browser
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password + 'ff-salt-2024'); // เพิ่ม salt
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  // หาผู้ใช้จากชื่อ-นามสกุล
+  const findUserByName = async (firstName, lastName) => {
+    const q = query(
+      collection(db, 'users'),
+      where('firstName', '==', firstName.trim()),
+      where('lastName', '==', lastName.trim())
+    );
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const userDoc = querySnapshot.docs[0];
+      return { id: userDoc.id, ...userDoc.data() };
+    }
+    return null;
   };
 
   const handleSubmit = async (e) => {
@@ -50,56 +57,16 @@ export default function Login({ user }) {
           return;
         }
 
-        // หาผู้ใช้ด้วย firstName และ lastName
-        const q = query(
-          collection(db, 'users'), 
-          where('firstName', '==', firstName.trim()),
-          where('lastName', '==', lastName.trim())
-        );
+        // หาผู้ใช้จากชื่อ-นามสกุล
+        const existingUser = await findUserByName(firstName, lastName);
         
-        const querySnapshot = await getDocs(q);
-        
-        if (querySnapshot.empty) {
+        if (!existingUser) {
           setError('ไม่พบผู้ใช้ในระบบ');
           return;
         }
 
-        // ตรวจสอบรหัสผ่าน
-        const hashedPassword = await hashPassword(password);
-        let userFound = null;
-        
-        for (const userDoc of querySnapshot.docs) {
-          const userData = userDoc.data();
-          
-          if (userData.hashedPassword === hashedPassword) {
-            userFound = { id: userDoc.id, ...userData };
-            break;
-          }
-        }
-
-        if (!userFound) {
-          setError('รหัสผ่านไม่ถูกต้อง');
-          return;
-        }
-
-        // สร้าง session ด้วย Firebase Auth (anonymous)
-        const authResult = await signInAnonymously(auth);
-        
-        // อัพเดต user document ด้วย auth UID ใหม่
-        await setDoc(doc(db, 'users', authResult.user.uid), {
-          ...userFound,
-          lastLoginAt: new Date()
-        });
-
-        // เก็บข้อมูล user ใน localStorage สำหรับ session
-        localStorage.setItem('currentUser', JSON.stringify({
-          uid: authResult.user.uid,
-          username: userFound.username,
-          firstName: userFound.firstName,
-          lastName: userFound.lastName,
-          nickname: userFound.nickname,
-          role: userFound.role
-        }));
+        // ใช้ email ที่เก็บไว้ใน Firestore
+        const userCredential = await signInWithEmailAndPassword(auth, existingUser.email, password);
         
         router.push('/dashboard');
         
@@ -116,51 +83,46 @@ export default function Login({ user }) {
         }
 
         // ตรวจสอบว่ามีผู้ใช้ชื่อนี้แล้วหรือยัง
-        const existingUserQuery = query(
-          collection(db, 'users'),
-          where('firstName', '==', firstName.trim()),
-          where('lastName', '==', lastName.trim())
-        );
+        const existingUser = await findUserByName(firstName, lastName);
         
-        const existingUser = await getDocs(existingUserQuery);
-        
-        if (!existingUser.empty) {
+        if (existingUser) {
           setError('มีผู้ใช้ชื่อนี้ในระบบแล้ว');
           return;
         }
 
-        // สร้างบัญชีใหม่
-        const authResult = await signInAnonymously(auth);
-        const username = generateUsername(firstName, lastName);
-        const hashedPassword = await hashPassword(password);
+        // สร้าง fake email
+        const fakeEmail = generateEmailFromName(firstName, lastName);
         
-        await setDoc(doc(db, 'users', authResult.user.uid), {
-          username,
+        // สร้างบัญชีด้วย Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+        
+        // เก็บข้อมูลใน Firestore
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          email: fakeEmail, // เก็บไว้สำหรับ login
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           nickname: nickname.trim(),
-          hashedPassword,
+          name: `${firstName.trim()} ${lastName.trim()}`, // backward compatibility
           points: 0,
           role: 'student',
-          createdAt: new Date(),
-          lastLoginAt: new Date()
+          createdAt: new Date()
         });
-
-        // เก็บข้อมูล user ใน localStorage
-        localStorage.setItem('currentUser', JSON.stringify({
-          uid: authResult.user.uid,
-          username,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          nickname: nickname.trim(),
-          role: 'student'
-        }));
         
         router.push('/dashboard');
       }
     } catch (error) {
       console.error('Auth error:', error);
-      setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+      if (error.code === 'auth/user-not-found') {
+        setError('ไม่พบผู้ใช้นี้ในระบบ');
+      } else if (error.code === 'auth/wrong-password') {
+        setError('รหัสผ่านไม่ถูกต้อง');
+      } else if (error.code === 'auth/email-already-in-use') {
+        setError('ชื่อนี้ถูกใช้งานแล้ว');
+      } else if (error.code === 'auth/weak-password') {
+        setError('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+      } else {
+        setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+      }
     } finally {
       setLoading(false);
     }
