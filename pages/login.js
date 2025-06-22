@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, doc, setDoc } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import Link from 'next/link';
+import bcrypt from 'bcryptjs';
 
 export default function Login({ user }) {
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -19,6 +21,34 @@ export default function Login({ user }) {
     return null;
   }
 
+  const generateUsername = (firstName, lastName) => {
+    // สร้าง username จาก ชื่อ + นามสกุล + random number
+    const cleanFirst = firstName.trim().toLowerCase();
+    const cleanLast = lastName.trim().toLowerCase();
+    const randomNum = Math.floor(Math.random() * 1000);
+    return `${cleanFirst}${cleanLast}${randomNum}`;
+  };
+
+  const hashPassword = async (password) => {
+    const salt = await bcrypt.genSalt(10);
+    return await bcrypt.hash(password, salt);
+  };
+
+  const verifyPassword = async (password, hashedPassword) => {
+    return await bcrypt.compare(password, hashedPassword);
+  };
+
+  const findUserByUsername = async (username) => {
+    const q = query(collection(db, 'users'), where('username', '==', username));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const userDoc = querySnapshot.docs[0];
+      return { id: userDoc.id, ...userDoc.data() };
+    }
+    return null;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -26,50 +56,124 @@ export default function Login({ user }) {
 
     try {
       if (isLogin) {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-        
-        if (!userDoc.exists()) {
-          await setDoc(doc(db, 'users', userCredential.user.uid), {
-            email: userCredential.user.email,
-            name: userCredential.user.email.split('@')[0],
-            points: 0,
-            role: userCredential.user.uid === process.env.NEXT_PUBLIC_ADMIN_UID ? 'admin' : 'student',
-            createdAt: new Date()
-          });
-        }
-        
-        router.push('/dashboard');
-      } else {
-        if (!name.trim()) {
-          setError('กรุณาใส่ชื่อ-นามสกุล');
+        // Login Logic
+        if (!firstName.trim() || !lastName.trim()) {
+          setError('กรุณากรอกชื่อและนามสกุล');
           return;
         }
+
+        const username = generateUsername(firstName, lastName);
         
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // หาผู้ใช้ด้วย username pattern
+        const q = query(
+          collection(db, 'users'), 
+          where('firstName', '==', firstName.trim()),
+          where('lastName', '==', lastName.trim())
+        );
         
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
-          email,
-          name: name.trim(),
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+          setError('ไม่พบผู้ใช้ในระบบ');
+          return;
+        }
+
+        // ตรวจสอบรหัสผ่าน
+        let userFound = null;
+        for (const userDoc of querySnapshot.docs) {
+          const userData = userDoc.data();
+          const isPasswordValid = await verifyPassword(password, userData.hashedPassword);
+          
+          if (isPasswordValid) {
+            userFound = { id: userDoc.id, ...userData };
+            break;
+          }
+        }
+
+        if (!userFound) {
+          setError('รหัสผ่านไม่ถูกต้อง');
+          return;
+        }
+
+        // สร้าง session ด้วย Firebase Auth (anonymous)
+        const authResult = await signInAnonymously(auth);
+        
+        // อัพเดต user document ด้วย auth UID ใหม่
+        await setDoc(doc(db, 'users', authResult.user.uid), {
+          ...userFound,
+          lastLoginAt: new Date()
+        });
+
+        // เก็บข้อมูล user ใน localStorage สำหรับ session
+        localStorage.setItem('currentUser', JSON.stringify({
+          uid: authResult.user.uid,
+          username: userFound.username,
+          firstName: userFound.firstName,
+          lastName: userFound.lastName,
+          nickname: userFound.nickname,
+          role: userFound.role
+        }));
+        
+        router.push('/dashboard');
+        
+      } else {
+        // Register Logic
+        if (!firstName.trim() || !lastName.trim() || !nickname.trim()) {
+          setError('กรุณากรอกข้อมูลให้ครบถ้วน');
+          return;
+        }
+
+        if (password.length < 6) {
+          setError('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+          return;
+        }
+
+        // ตรวจสอบว่ามีผู้ใช้ชื่อนี้แล้วหรือยัง
+        const existingUserQuery = query(
+          collection(db, 'users'),
+          where('firstName', '==', firstName.trim()),
+          where('lastName', '==', lastName.trim())
+        );
+        
+        const existingUser = await getDocs(existingUserQuery);
+        
+        if (!existingUser.empty) {
+          setError('มีผู้ใช้ชื่อนี้ในระบบแล้ว');
+          return;
+        }
+
+        // สร้างบัญชีใหม่
+        const authResult = await signInAnonymously(auth);
+        const username = generateUsername(firstName, lastName);
+        const hashedPassword = await hashPassword(password);
+        
+        await setDoc(doc(db, 'users', authResult.user.uid), {
+          username,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          nickname: nickname.trim(),
+          hashedPassword,
           points: 0,
           role: 'student',
-          createdAt: new Date()
+          createdAt: new Date(),
+          lastLoginAt: new Date()
         });
+
+        // เก็บข้อมูล user ใน localStorage
+        localStorage.setItem('currentUser', JSON.stringify({
+          uid: authResult.user.uid,
+          username,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          nickname: nickname.trim(),
+          role: 'student'
+        }));
         
         router.push('/dashboard');
       }
     } catch (error) {
-      if (error.code === 'auth/user-not-found') {
-        setError('ไม่พบผู้ใช้นี้ในระบบ');
-      } else if (error.code === 'auth/wrong-password') {
-        setError('รหัสผ่านไม่ถูกต้อง');
-      } else if (error.code === 'auth/email-already-in-use') {
-        setError('อีเมลนี้ถูกใช้งานแล้ว');
-      } else if (error.code === 'auth/weak-password') {
-        setError('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
-      } else {
-        setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
-      }
+      console.error('Auth error:', error);
+      setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
     } finally {
       setLoading(false);
     }
@@ -97,7 +201,6 @@ export default function Login({ user }) {
             <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mb-2">
               ยินดีต้อนรับ ไอหล่อ
             </h1>
-           
           </div>
 
           <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-3xl shadow-2xl p-8">
@@ -125,35 +228,51 @@ export default function Login({ user }) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {!isLogin && (
+              <div className="grid grid-cols-2 gap-4">
                 <div className="group">
                   <label className="block text-sm font-medium text-white/90 mb-2">
-                    ชื่อ-นามสกุล ✨
+                    ชื่อจริง ✨
                   </label>
                   <input
                     type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all duration-300 backdrop-blur-sm"
-                    placeholder="กรอกชื่อ-นามสกุลของคุณ"
+                    placeholder="ชื่อ"
+                    required
+                  />
+                </div>
+
+                <div className="group">
+                  <label className="block text-sm font-medium text-white/90 mb-2">
+                    นามสกุล ✨
+                  </label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all duration-300 backdrop-blur-sm"
+                    placeholder="นามสกุล"
+                    required
+                  />
+                </div>
+              </div>
+
+              {!isLogin && (
+                <div className="group">
+                  <label className="block text-sm font-medium text-white/90 mb-2">
+                    ชื่อเล่น 🎭
+                  </label>
+                  <input
+                    type="text"
+                    value={nickname}
+                    onChange={(e) => setNickname(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all duration-300 backdrop-blur-sm"
+                    placeholder="ชื่อเล่นของคุณ"
                     required={!isLogin}
                   />
                 </div>
               )}
-
-              <div className="group">
-                <label className="block text-sm font-medium text-white/90 mb-2">
-                  อีเมล 📧
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all duration-300 backdrop-blur-sm"
-                  placeholder="กรอกอีเมลของคุณ"
-                  required
-                />
-              </div>
 
               <div className="group">
                 <label className="block text-sm font-medium text-white/90 mb-2">
@@ -190,12 +309,6 @@ export default function Login({ user }) {
                 )}
               </button>
             </form>
-
-           
-          </div>
-
-          <div className="text-center mt-8">
-            
           </div>
         </div>
       </div>

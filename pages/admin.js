@@ -126,11 +126,13 @@ export default function Admin({ user, loading }) {
         // If not JSON, use the processed studentId
       }
 
-      // Find student by ID (uid from Firebase)
+      // Find student by ID (uid from Firebase) or username
       const student = students.find(s => 
         s.id === studentId || 
-        s.email === studentId ||
-        s.studentId === studentId
+        s.username === studentId ||
+        s.firstName === studentId ||
+        s.lastName === studentId ||
+        (studentId.includes('-') && studentId.split('-')[0] === s.id)
       );
 
       if (student) {

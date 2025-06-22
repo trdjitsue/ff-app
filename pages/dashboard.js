@@ -13,19 +13,19 @@ export default function Dashboard({ user, loading }) {
   const [showQR, setShowQR] = useState(false);
   const router = useRouter();
 
-useEffect(() => {
-  if (!loading && !user) {
-    router.push('/login');
-    return;
-  }
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+      return;
+    }
 
-  if (user) {
-    fetchUserData();
-    fetchActivities();
-    fetchCompletedActivities();
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [user, loading, router]);
+    if (user) {
+      fetchUserData();
+      fetchActivities();
+      fetchCompletedActivities();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading, router]);
 
   const fetchUserData = async () => {
     try {
@@ -102,6 +102,8 @@ useEffect(() => {
 
   const handleLogout = async () => {
     try {
+      // Clear localStorage session
+      localStorage.removeItem('currentUser');
       await signOut(auth);
       router.push('/');
     } catch (error) {
@@ -132,6 +134,10 @@ useEffect(() => {
     );
   }
 
+  // QR Code value - use username if available, fallback to name
+  const qrValue = user && userData ? 
+    `${user.uid}-${userData.username || (userData.firstName + userData.lastName) || userData.name}` : '';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
       <div className="absolute inset-0 overflow-hidden">
@@ -149,7 +155,6 @@ useEffect(() => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white">แดชบอร์ดนักเรียน</h1>
-                
               </div>
             </div>
             <div className="flex items-center space-x-6">
@@ -162,7 +167,9 @@ useEffect(() => {
               </button>
               <div className="text-right">
                 <p className="text-white/70 text-sm">ยินดีต้อนรับ</p>
-                <p className="font-bold text-white text-lg">{userData.name}</p>
+                <p className="font-bold text-white text-lg">
+                  {userData.nickname || userData.firstName || userData.name}
+                </p>
               </div>
               <button
                 onClick={handleLogout}
@@ -190,13 +197,25 @@ useEffect(() => {
               </div>
               
               <div className="text-center">
-                <QRCodeGenerator value={user && userData ? `${user.uid}-${userData.name}` : ''} size={200} />
+                <QRCodeGenerator value={qrValue} size={200} />
                 <div className="mt-6 p-4 bg-white/5 rounded-xl">
-                  <p className="text-white font-semibold">{userData.name}</p>
-                  <p className="text-white/70 text-sm">แสดง QR Code นี้ให้ผู้ดูแลเพื่อรับคะแนนทันที!</p>
+                  <p className="text-white font-semibold">
+                    {userData.nickname && userData.firstName ? 
+                      `${userData.nickname} (${userData.firstName} ${userData.lastName})` :
+                      userData.name || `${userData.firstName} ${userData.lastName}`
+                    }
+                  </p>
+                  <p className="text-white/70 text-sm">
+                    แสดง QR Code นี้ให้ผู้ดูแลเพื่อรับคะแนนทันที!
+                  </p>
                   <div className="mt-4 bg-gradient-to-r from-cyan-400 to-purple-400 rounded-lg p-3">
                     <p className="text-white font-bold">คะแนนปัจจุบัน: {userData.points}</p>
                   </div>
+                  {userData.username && (
+                    <div className="mt-2 text-white/50 text-xs">
+                      Username: {userData.username}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -213,24 +232,24 @@ useEffect(() => {
               </div>
               <div className="text-right">
                 <div className="text-6xl font-black bg-white/20 rounded-2xl px-6 py-4 backdrop-blur-sm">
-                  {userData.points}
+                  {userData.points || 0}
                 </div>
                 <p className="text-white/80 mt-2 text-lg">คะแนนรวม</p>
               </div>
             </div>
             
             <div className="mt-6 flex space-x-4 flex-wrap">
-              {userData.points >= 100 && (
+              {(userData.points || 0) >= 100 && (
                 <div className="bg-yellow-400/20 border border-yellow-400/50 rounded-full px-4 py-2 text-yellow-200 text-sm font-medium">
                   🏆 นักเรียนดีเด่น
                 </div>
               )}
-              {userData.points >= 50 && (
+              {(userData.points || 0) >= 50 && (
                 <div className="bg-blue-400/20 border border-blue-400/50 rounded-full px-4 py-2 text-blue-200 text-sm font-medium">
                   🌟 ดาวรุ่ง
                 </div>
               )}
-              {userData.points >= 10 && (
+              {(userData.points || 0) >= 10 && (
                 <div className="bg-green-400/20 border border-green-400/50 rounded-full px-4 py-2 text-green-200 text-sm font-medium">
                   🚀 เริ่มต้นได้ดี
                 </div>
