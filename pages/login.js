@@ -4,7 +4,6 @@ import { collection, query, where, getDocs, addDoc, doc, setDoc } from 'firebase
 import { signInAnonymously } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import Link from 'next/link';
-import bcrypt from 'bcryptjs';
 
 export default function Login({ user }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -30,23 +29,12 @@ export default function Login({ user }) {
   };
 
   const hashPassword = async (password) => {
-    const salt = await bcrypt.genSalt(10);
-    return await bcrypt.hash(password, salt);
-  };
-
-  const verifyPassword = async (password, hashedPassword) => {
-    return await bcrypt.compare(password, hashedPassword);
-  };
-
-  const findUserByUsername = async (username) => {
-    const q = query(collection(db, 'users'), where('username', '==', username));
-    const querySnapshot = await getDocs(q);
-    
-    if (!querySnapshot.empty) {
-      const userDoc = querySnapshot.docs[0];
-      return { id: userDoc.id, ...userDoc.data() };
-    }
-    return null;
+    // ใช้ Web Crypto API แทน bcrypt สำหรับ browser
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + 'ff-salt-2024'); // เพิ่ม salt
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
   const handleSubmit = async (e) => {
@@ -62,9 +50,7 @@ export default function Login({ user }) {
           return;
         }
 
-        const username = generateUsername(firstName, lastName);
-        
-        // หาผู้ใช้ด้วย username pattern
+        // หาผู้ใช้ด้วย firstName และ lastName
         const q = query(
           collection(db, 'users'), 
           where('firstName', '==', firstName.trim()),
@@ -79,12 +65,13 @@ export default function Login({ user }) {
         }
 
         // ตรวจสอบรหัสผ่าน
+        const hashedPassword = await hashPassword(password);
         let userFound = null;
+        
         for (const userDoc of querySnapshot.docs) {
           const userData = userDoc.data();
-          const isPasswordValid = await verifyPassword(password, userData.hashedPassword);
           
-          if (isPasswordValid) {
+          if (userData.hashedPassword === hashedPassword) {
             userFound = { id: userDoc.id, ...userData };
             break;
           }
