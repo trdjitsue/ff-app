@@ -1,22 +1,46 @@
-// วิธีใช้: เพิ่มส่วนนี้ใน dashboard.js component ของคุณ
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { 
+  collection, 
+  getDocs, 
+  getDoc,
+  updateDoc, 
+  doc, 
+  query, 
+  where, 
+  orderBy, 
+  increment 
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export default function Dashboard({ user, loading }) {
   const router = useRouter();
   
-  // ===== States เดิม =====
+  // Basic States
   const [userData, setUserData] = useState(null);
   const [activities, setActivities] = useState([]);
   const [showQR, setShowQR] = useState(false);
-  // ... states อื่นๆ ที่มีอยู่แล้ว
-
-  // ===== เพิ่ม Camp Mentor States =====
+  
+  // Camp Mentor States
   const [isCampMentor, setIsCampMentor] = useState(false);
   const [campData, setCampData] = useState(null);
   const [campKids, setCampKids] = useState([]);
   const [activeTab, setActiveTab] = useState('activities'); // For mentors: activities or camp
 
-  // ===== เพิ่ม Camp Mentor Functions =====
-  
+  // Fetch activities
+  const fetchActivities = async () => {
+    try {
+      const activitiesSnapshot = await getDocs(collection(db, 'activities'));
+      const activitiesList = activitiesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setActivities(activitiesList);
+    } catch (error) {
+      console.error('Error fetching activities:', error);
+    }
+  };
+
   // Check if user is camp mentor and fetch camp data
   const checkCampMentorStatus = async () => {
     if (!userData || !userData.camp_mentor || !userData.camp_id) {
@@ -122,7 +146,7 @@ export default function Dashboard({ user, loading }) {
     }
   };
 
-  // ===== แก้ไข fetchUserData Function ที่มีอยู่แล้ว =====
+  // Fetch user data
   const fetchUserData = async () => {
     try {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -134,7 +158,7 @@ export default function Dashboard({ user, loading }) {
           return;
         }
         
-        // ⭐ เพิ่มส่วนนี้ - Check if user is camp mentor after setting userData
+        // Check if user is camp mentor after setting userData
         setTimeout(() => checkCampMentorStatus(), 100);
       }
     } catch (error) {
@@ -142,7 +166,7 @@ export default function Dashboard({ user, loading }) {
     }
   };
 
-  // ===== useEffect เดิม (แก้ไขให้เรียก checkCampMentorStatus) =====
+  // Effects
   useEffect(() => {
     if (user && !loading) {
       fetchUserData();
@@ -150,14 +174,30 @@ export default function Dashboard({ user, loading }) {
     }
   }, [user, loading]);
 
-  // ===== เพิ่ม useEffect สำหรับ camp mentor =====
   useEffect(() => {
     if (userData) {
       checkCampMentorStatus();
     }
   }, [userData]);
 
-  // ===== JSX Return =====
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center">
+        <div className="text-white text-xl">กำลังโหลด...</div>
+      </div>
+    );
+  }
+
+  // No user
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center">
+        <div className="text-white text-xl">กรุณาเข้าสู่ระบบ</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
       {/* Header Section */}
