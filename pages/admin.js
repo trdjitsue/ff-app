@@ -453,6 +453,20 @@ export default function Admin({ user, loading }) {
           </p>
         </div>
 
+        {/* Logout Button */}
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => {
+              // Add your logout function here
+              // Example: signOut(auth);
+              router.push('/');
+            }}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            🚪 ออกจากระบบ
+          </button>
+        </div>
+
         {/* Navigation Tabs */}
         <div className="flex space-x-4 mb-8 overflow-x-auto">
           <button

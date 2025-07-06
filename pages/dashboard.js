@@ -249,6 +249,18 @@ export default function Dashboard({ user, loading }) {
               >
                 📱 แสดง QR Code
               </button>
+
+              {/* Logout Button */}
+              <button
+                onClick={() => {
+                  // Add your logout function here
+                  // Example: signOut(auth);
+                  router.push('/');
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white font-medium py-3 px-6 rounded-xl transition-all duration-300 hover:scale-105 shadow-lg"
+              >
+                🚪 ออกจากระบบ
+              </button>
             </div>
           </div>
         </div>
